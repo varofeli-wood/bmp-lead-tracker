@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 # ── Conversation States ───────────────────────────────────────────────────────
 COMPANY, PIC, JABATAN, ZONA, STATUS, KETERANGAN, FOTO, CONFIRM, PHOTO_CONFIRM = range(9)
 
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '').strip()
+logger.info(f'BOT_TOKEN loaded: length={len(BOT_TOKEN)}, starts_with={BOT_TOKEN[:10] if BOT_TOKEN else "EMPTY"}')
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
