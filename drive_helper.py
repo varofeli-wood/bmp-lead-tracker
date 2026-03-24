@@ -18,33 +18,39 @@ def _drive_service():
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     return build('drive', 'v3', credentials=creds)
 
-def _get_or_create_folder(service, name: str, parent_id: str) -> str:
-    q = (f"name='{name}' and '{parent_id}' in parents "
-         f"and mimeType='application/vnd.google-apps.folder' and trashed=false")
+def _get_or_create_folder(service, name: str, parent_id: str = None) -> str:
+    """Buat atau ambil folder. Jika parent_id None, buat di root service account."""
+    if parent_id:
+        q = (f"name='{name}' and '{parent_id}' in parents "
+             f"and mimeType='application/vnd.google-apps.folder' and trashed=false")
+    else:
+        q = (f"name='{name}' and 'root' in parents "
+             f"and mimeType='application/vnd.google-apps.folder' and trashed=false")
+
     results = service.files().list(q=q, fields='files(id)').execute()
     files   = results.get('files', [])
     if files:
         return files[0]['id']
-    meta   = {'name': name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_id]}
+
+    meta = {'name': name, 'mimeType': 'application/vnd.google-apps.folder'}
+    if parent_id:
+        meta['parents'] = [parent_id]
+
     folder = service.files().create(body=meta, fields='id').execute()
     return folder['id']
 
 async def upload_photo(bot, file_id: str) -> dict | None:
     try:
-        drive_folder_id = os.environ.get('DRIVE_FOLDER_ID', '')
-        if not drive_folder_id:
-            logger.warning('DRIVE_FOLDER_ID not set, skipping photo upload')
-            return None
-
-        # Download from Telegram
+        # Download dari Telegram
         tg_file    = await bot.get_file(file_id)
         file_bytes = await tg_file.download_as_bytearray()
 
-        # Upload to Drive
-        service     = _drive_service()
-        now         = datetime.now(WITA)
-        folder_name = now.strftime('%Y-%m')
-        subfolder   = _get_or_create_folder(service, folder_name, drive_folder_id)
+        service = _drive_service()
+        now     = datetime.now(WITA)
+
+        # Buat folder BMP-Photos di root service account, lalu subfolder bulan
+        root_folder = _get_or_create_folder(service, 'BMP-Photos')
+        subfolder   = _get_or_create_folder(service, now.strftime('%Y-%m'), root_folder)
         filename    = f"visit_{now.strftime('%Y%m%d_%H%M%S')}.jpg"
 
         media    = MediaIoBaseUpload(io.BytesIO(bytes(file_bytes)), mimetype='image/jpeg')
@@ -54,7 +60,7 @@ async def upload_photo(bot, file_id: str) -> dict | None:
             fields='id,webViewLink'
         ).execute()
 
-        # Make publicly viewable
+        # Buat file bisa diakses publik
         service.permissions().create(
             fileId=uploaded['id'],
             body={'type': 'anyone', 'role': 'reader'}
