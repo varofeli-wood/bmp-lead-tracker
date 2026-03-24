@@ -56,6 +56,24 @@ def append_visit(data: dict) -> str:
     logger.info(f'Visit saved: {visit_id}')
     return visit_id
 
+def get_recent_visits_with_photo(limit: int = 10) -> list:
+    """Ambil visit terbaru yang punya foto_id, max `limit` baris."""
+    ss     = _spreadsheet()
+    sheet  = ss.worksheet('Visits')
+    rows   = sheet.get_all_values()  # header + data
+    result = []
+    for row in reversed(rows[1:]):   # dari terbaru
+        if len(row) >= 10 and row[9]:  # kolom foto_id (index 9) tidak kosong
+            result.append({
+                'visit_id':    row[0],
+                'timestamp':   row[1],
+                'company':     row[2],
+                'foto_id':     row[9]
+            })
+        if len(result) >= limit:
+            break
+    return result
+
 def upsert_lead(data: dict):
     ss      = _spreadsheet()
     sheet   = ss.worksheet('Leads')

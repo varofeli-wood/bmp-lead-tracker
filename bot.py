@@ -107,6 +107,58 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML'
     )
 
+async def cmd_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('⏳ Mengambil daftar foto...')
+    from sheets_helper import get_recent_visits_with_photo
+    visits = get_recent_visits_with_photo(limit=10)
+
+    if not visits:
+        await update.message.reply_text('📭 Belum ada visit dengan foto.')
+        return
+
+    # Simpan list di user_data agar bisa diambil saat callback
+    context.user_data['foto_list'] = visits
+
+    # Buat tombol per visit
+    keyboard = []
+    for i, v in enumerate(visits):
+        # Format: PT ABC — 24/03 14:22
+        ts = v['timestamp'][:16] if v['timestamp'] else ''
+        try:
+            dt = datetime.strptime(ts, '%Y-%m-%d %H:%M')
+            ts = dt.strftime('%d/%m %H:%M')
+        except Exception:
+            pass
+        label = f"{v['company'][:25]} — {ts}"
+        keyboard.append([InlineKeyboardButton(label, callback_data=f'foto_{i}')])
+
+    await update.message.reply_text(
+        '📸 <b>Pilih visit untuk lihat foto:</b>',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML'
+    )
+
+async def foto_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    idx      = int(query.data.replace('foto_', ''))
+    foto_list = context.user_data.get('foto_list', [])
+
+    if idx >= len(foto_list):
+        await query.message.reply_text('⚠️ Data tidak ditemukan.')
+        return
+
+    visit   = foto_list[idx]
+    file_id = visit['foto_id']
+
+    await query.message.reply_text(f'📸 Foto visit: <b>{visit["company"]}</b>', parse_mode='HTML')
+    try:
+        await query.message.reply_photo(photo=file_id)
+    except Exception as e:
+        logger.error(f'foto_callback send photo error: {e}')
+        await query.message.reply_text(f'⚠️ Gagal kirim foto: {str(e)}')
+
 async def cmd_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         '⚠️ Perintah tidak dikenal.\n\n'
@@ -360,6 +412,8 @@ def main():
     app.add_handler(conv)
     app.add_handler(CommandHandler('start', cmd_start))
     app.add_handler(CommandHandler('help', cmd_help))
+    app.add_handler(CommandHandler('foto', cmd_foto))
+    app.add_handler(CallbackQueryHandler(foto_callback, pattern='^foto_\\d+$'))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_no_state))
     app.add_handler(MessageHandler(filters.COMMAND, cmd_unknown))
 
